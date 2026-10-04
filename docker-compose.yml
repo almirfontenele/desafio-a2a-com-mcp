@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  desafio-a2a-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: desafio-a2a-mcp-app
+    ports:
+      - "7300:7300" # Agente A2A
+      - "7301:7301" # Servidor MCP
+    environment:
+      - REQUEST_STATE_SECRET=${REQUEST_STATE_SECRET:-}
+      - PORT_AGENT=7300
+      - PORT_MCP=7301
+    volumes:
+      - .:/app
+    restart: unless-stopped
