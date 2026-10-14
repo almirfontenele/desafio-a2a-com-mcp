@@ -74,7 +74,16 @@ class A2ARequestHandler(BaseHTTPRequestHandler):
         method = body.get("method", "")
         params = body.get("params", {}) or {}
 
-        result, error = self.container.dispatcher.dispatch(method, params, traceparent)
+        try:
+            result, error = self.container.dispatcher.dispatch(method, params, traceparent)
+        except Exception as e:
+            self.send_json_response(200, {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "error": {"code": -32603, "message": f"Internal error: {str(e)}"},
+            })
+            return
+
         if error:
             self.send_json_response(200, {
                 "jsonrpc": "2.0",

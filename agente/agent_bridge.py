@@ -75,7 +75,7 @@ class ReservationBridgeService:
             schema = req_params.get("requestedSchema", {})
             properties = schema.get("properties", {})
             sala_prop = properties.get("sala", {})
-            alternativas = sala_prop.get("enum", [])
+            alternativas = sala_prop.get("enum") or ([sala_prop["const"]] if "const" in sala_prop else [])
 
             task.state = TaskState.INPUT_REQUIRED
             task.request_state = res.get("requestState")

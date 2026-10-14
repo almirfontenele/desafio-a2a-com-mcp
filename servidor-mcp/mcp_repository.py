@@ -99,7 +99,7 @@ class RoomRepository:
 
     def find_alternative_rooms(self, requested_sala_id: str, inicio: str, fim: str) -> list[str]:
         requested_room = self.get_sala(requested_sala_id)
-        if not requested_room:
+        if requested_room is None:
             return []
         req_cap = requested_room.capacidade
 
