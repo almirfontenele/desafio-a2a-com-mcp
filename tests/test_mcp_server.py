@@ -10,7 +10,7 @@ MCP_DIR = BASE_DIR / "servidor-mcp"
 if str(MCP_DIR) not in sys.path:
     sys.path.insert(0, str(MCP_DIR))
 
-from mcp_config import SALAS_FILE, RESERVAS_FILE, POLITICA_FILE
+from mcp_config import SALAS_FILE, RESERVAS_FILE, POLITICA_FILE, get_request_state_secret
 from mcp_repository import RoomRepository
 from mcp_rules import BookingPolicyValidator
 from mcp_security import HMACStateTokenService
@@ -98,6 +98,36 @@ class TestMCPServerDomainAndRules(unittest.TestCase):
         # Expired token check
         expired_token = self.token_service.generate_token(args, ttl_seconds=-10)
         self.assertIsNone(self.token_service.verify_token(expired_token))
+
+    def test_secret_refusal_without_env_variable(self):
+        """Verify that get_request_state_secret and HMACStateTokenService refuse missing or short secret."""
+        old_val = os.environ.get("REQUEST_STATE_SECRET")
+        try:
+            if "REQUEST_STATE_SECRET" in os.environ:
+                del os.environ["REQUEST_STATE_SECRET"]
+
+            with self.assertRaises(RuntimeError):
+                get_request_state_secret()
+
+            with self.assertRaises(RuntimeError):
+                HMACStateTokenService()
+
+            os.environ["REQUEST_STATE_SECRET"] = "too_short_secret"
+            with self.assertRaises(RuntimeError):
+                get_request_state_secret()
+
+            os.environ["REQUEST_STATE_SECRET"] = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            sec = get_request_state_secret()
+            self.assertEqual(sec, "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+        finally:
+            if old_val is not None:
+                os.environ["REQUEST_STATE_SECRET"] = old_val
+            elif "REQUEST_STATE_SECRET" in os.environ:
+                del os.environ["REQUEST_STATE_SECRET"]
+
+    def test_dynamic_politica_version_extraction(self):
+        """Verify that repository dynamically extracts policy version from first line of markdown."""
+        self.assertEqual(self.repository.get_politica_versao(), "2026-11-01")
 
 
 if __name__ == "__main__":

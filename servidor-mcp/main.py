@@ -12,11 +12,17 @@ from pathlib import Path
 # Ensure package directory is in sys.path
 sys.path.insert(0, str(Path(__file__).parent.resolve()))
 
-from mcp_config import DEFAULT_MCP_PORT
+from mcp_config import DEFAULT_MCP_PORT, get_request_state_secret
 from server import create_mcp_server, MCPServiceContainer
 
 
 def main() -> None:
+    try:
+        get_request_state_secret()
+    except Exception as e:
+        print(f"[MCP-SERVER] Erro ao iniciar servidor MCP: {e}", file=sys.stderr)
+        sys.exit(1)
+
     port = int(os.environ.get("MCP_PORT", DEFAULT_MCP_PORT))
     container = MCPServiceContainer()
     server = create_mcp_server(port, container)

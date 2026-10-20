@@ -35,6 +35,8 @@ ERRO_SEM_ALTERNATIVA = "Sem alternativas disponiveis no intervalo"
 def get_request_state_secret() -> str:
     """Retrieve the HMAC secret key from the environment."""
     secret = os.environ.get("REQUEST_STATE_SECRET")
-    if not secret:
-        return "default_secret_key_minimum_32_bytes_long_1234567890abcdef"
-    return secret
+    if not secret or not secret.strip():
+        raise RuntimeError("REQUEST_STATE_SECRET environment variable is required")
+    if len(secret.strip().encode("utf-8")) < 32:
+        raise RuntimeError("REQUEST_STATE_SECRET must have at least 32 bytes")
+    return secret.strip()

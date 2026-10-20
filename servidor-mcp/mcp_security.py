@@ -21,10 +21,10 @@ class HMACStateTokenService:
     """
 
     def __init__(self, secret: str | None = None) -> None:
-        self._secret = secret
+        self._secret = secret or get_request_state_secret()
 
     def _get_secret(self) -> str:
-        return self._secret or get_request_state_secret()
+        return self._secret
 
     def generate_token(self, args: dict[str, Any], ttl_seconds: int = TOKEN_EXPIRATION_SECONDS) -> str:
         secret = self._get_secret()

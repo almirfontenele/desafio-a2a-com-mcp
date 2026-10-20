@@ -22,12 +22,11 @@ class MCPClient:
     def __init__(self, mcp_url: str | None = None) -> None:
         self._mcp_url = mcp_url or get_mcp_url()
 
-    def call_tool(
+    def _send_request(
         self,
-        tool_name: str,
-        arguments: dict[str, Any],
-        input_responses: dict[str, Any] | None = None,
-        request_state: str | None = None,
+        method: str,
+        params: dict[str, Any],
+        name: str | None = None,
         traceparent: str | None = None,
     ) -> tuple[int, dict[str, Any]]:
         meta: dict[str, Any] = {
@@ -45,30 +44,21 @@ class MCPClient:
         if traceparent:
             meta["traceparent"] = traceparent
 
-        params: dict[str, Any] = {
-            "name": tool_name,
-            "arguments": arguments,
-            "_meta": meta,
-        }
-        if input_responses is not None:
-            params["inputResponses"] = input_responses
-        if request_state is not None:
-            params["requestState"] = request_state
-
         payload = {
             "jsonrpc": "2.0",
             "id": secrets.token_hex(6),  # Always generates a NEW JSON-RPC ID
-            "method": "tools/call",
-            "params": params,
+            "method": method,
+            "params": {**params, "_meta": meta},
         }
 
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
             "MCP-Protocol-Version": PROTOCOLO_MCP,
-            "Mcp-Method": "tools/call",
-            "Mcp-Name": tool_name,
+            "Mcp-Method": method,
         }
+        if name:
+            headers["Mcp-Name"] = name
 
         req = urllib.request.Request(
             self._mcp_url,
@@ -90,3 +80,45 @@ class MCPClient:
                 return e.code, {"error": {"code": -32603, "message": raw}}
         except Exception as e:
             return 500, {"error": {"code": -32603, "message": str(e)}}
+
+    def list_tools(self, traceparent: str | None = None) -> tuple[int, dict[str, Any]]:
+        """Perform tool discovery via tools/list."""
+        return self._send_request(
+            method="tools/list",
+            params={},
+            name=None,
+            traceparent=traceparent,
+        )
+
+    def read_resource(self, uri: str, traceparent: str | None = None) -> tuple[int, dict[str, Any]]:
+        """Read an MCP resource via resources/read."""
+        return self._send_request(
+            method="resources/read",
+            params={"uri": uri},
+            name=uri,
+            traceparent=traceparent,
+        )
+
+    def call_tool(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        input_responses: dict[str, Any] | None = None,
+        request_state: str | None = None,
+        traceparent: str | None = None,
+    ) -> tuple[int, dict[str, Any]]:
+        params: dict[str, Any] = {
+            "name": tool_name,
+            "arguments": arguments,
+        }
+        if input_responses is not None:
+            params["inputResponses"] = input_responses
+        if request_state is not None:
+            params["requestState"] = request_state
+
+        return self._send_request(
+            method="tools/call",
+            params=params,
+            name=tool_name,
+            traceparent=traceparent,
+        )

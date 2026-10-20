@@ -26,6 +26,7 @@ class AgentServiceContainer:
 
     def reset(self) -> None:
         self.task_manager.clear()
+        self.bridge_service.reset()
 
 
 class A2ARequestHandler(BaseHTTPRequestHandler):

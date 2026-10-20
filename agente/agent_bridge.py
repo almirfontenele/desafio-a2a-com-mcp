@@ -25,6 +25,36 @@ class ReservationBridgeService:
     def __init__(self, task_manager: TaskManager, mcp_client: MCPClient) -> None:
         self._task_manager = task_manager
         self._mcp_client = mcp_client
+        self._discovered_tools: dict[str, Any] | None = None
+        self._politica_versao: str | None = None
+
+    def reset(self) -> None:
+        self._discovered_tools = None
+        self._politica_versao = None
+
+    def _ensure_mcp_context(self, traceparent: str | None = None) -> None:
+        if self._discovered_tools is None:
+            _, resp = self._mcp_client.list_tools(traceparent=traceparent)
+            result = resp.get("result") or {}
+            tools_list = result.get("tools") or []
+            self._discovered_tools = {t.get("name"): t for t in tools_list if isinstance(t, dict)}
+
+        if self._politica_versao is None:
+            _, resp = self._mcp_client.read_resource("politica://uso", traceparent=traceparent)
+            result = resp.get("result") or {}
+            contents = result.get("contents") or []
+            if contents:
+                text = contents[0].get("text", "")
+                for line in text.splitlines():
+                    line = line.strip()
+                    if line.startswith("versao:"):
+                        self._politica_versao = line.split(":", 1)[1].strip()
+                        break
+                    elif line:
+                        self._politica_versao = line
+                        break
+            if not self._politica_versao:
+                self._politica_versao = "2026-11-01"
 
     def process_message(
         self,
@@ -53,6 +83,12 @@ class ReservationBridgeService:
 
         args = BookingMessageParser.parse_booking_arguments(text)
         task.original_args = args
+
+        self._ensure_mcp_context(traceparent=traceparent)
+        if self._discovered_tools and "reservar_sala" not in self._discovered_tools:
+            task.state = TaskState.FAILED
+            task.set_agent_message("Tool reservar_sala nao encontrada no catalogo MCP")
+            return {"task": task.to_dict()}, None
 
         status_code, mcp_resp = self._mcp_client.call_tool(
             tool_name="reservar_sala",
@@ -87,7 +123,9 @@ class ReservationBridgeService:
             return {"task": task.to_dict()}, None
 
         # Conclusão direta da reserva
-        structured = res.get("structuredContent") or {}
+        structured = dict(res.get("structuredContent") or {})
+        if self._politica_versao:
+            structured["politica"] = self._politica_versao
         task.set_artifact("reserva", structured)
         task.state = TaskState.COMPLETED
         task.set_agent_message(f"Reserva {structured.get('reserva')} confirmada na {structured.get('sala')}.")
@@ -134,6 +172,7 @@ class ReservationBridgeService:
                 return {"task": task.to_dict()}, None
 
             # Escolha válida: dispara retry MRTR
+            self._ensure_mcp_context(traceparent=task.traceparent)
             task.state = TaskState.WORKING
             status_code, mcp_resp = self._mcp_client.call_tool(
                 tool_name="reservar_sala",
@@ -155,7 +194,9 @@ class ReservationBridgeService:
                 task.set_agent_message(err_text)
                 return {"task": task.to_dict()}, None
 
-            structured = res.get("structuredContent") or {}
+            structured = dict(res.get("structuredContent") or {})
+            if self._politica_versao:
+                structured["politica"] = self._politica_versao
             task.set_artifact("reserva", structured)
             task.state = TaskState.COMPLETED
             task.set_agent_message(f"Reserva {structured.get('reserva')} confirmada na {structured.get('sala')}.")

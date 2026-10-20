@@ -13,6 +13,8 @@ from agent_config import AGENT_CARD
 from agent_models import TaskRecord, TaskState
 from agent_parser import BookingMessageParser
 from agent_task_manager import TaskManager
+from agent_mcp_client import MCPClient
+from agent_bridge import ReservationBridgeService
 
 
 class TestA2AAgentUnit(unittest.TestCase):
@@ -94,6 +96,79 @@ class TestA2AAgentUnit(unittest.TestCase):
         self.assertEqual(task_dict["status"]["state"], "TASK_STATE_COMPLETED")
         self.assertEqual(len(task_dict["artifacts"]), 1)
         self.assertTrue(task.state.is_terminal)
+
+    def test_bridge_discovery_and_policy_extraction(self):
+        """Test that ReservationBridgeService discovers tools and extracts policy version before tools/call."""
+        manager = TaskManager()
+
+        call_log = []
+
+        class MockMCPClient(MCPClient):
+            def list_tools(self, traceparent=None):
+                call_log.append(("tools/list", traceparent))
+                return 200, {
+                    "result": {
+                        "tools": [
+                            {"name": "listar_salas"},
+                            {"name": "consultar_disponibilidade"},
+                            {"name": "reservar_sala"},
+                        ]
+                    }
+                }
+
+            def read_resource(self, uri, traceparent=None):
+                call_log.append(("resources/read", uri, traceparent))
+                return 200, {
+                    "result": {
+                        "contents": [
+                            {
+                                "uri": "politica://uso",
+                                "text": "versao: 2026-11-01\n\n- Politica de teste.",
+                            }
+                        ]
+                    }
+                }
+
+            def call_tool(self, tool_name, arguments, input_responses=None, request_state=None, traceparent=None):
+                call_log.append(("tools/call", tool_name, arguments, traceparent))
+                return 200, {
+                    "result": {
+                        "resultType": "complete",
+                        "isError": False,
+                        "structuredContent": {
+                            "reserva": "res-9999",
+                            "sala": arguments.get("sala"),
+                            "inicio": arguments.get("inicio"),
+                            "fim": arguments.get("fim"),
+                            "responsavel": arguments.get("responsavel"),
+                            "politica": None,
+                        },
+                    }
+                }
+
+        mock_client = MockMCPClient("http://mock:7301/mcp")
+        bridge = ReservationBridgeService(manager, mock_client)
+
+        msg = {
+            "parts": [{"text": "reservar sala=sala-aquario inicio=2026-11-03T09:00:00-03:00 fim=2026-11-03T10:00:00-03:00 responsavel=Doc"}],
+            "messageId": "msg-001",
+        }
+        res, err = bridge.process_message(msg, traceparent="00-testtrace-01")
+        self.assertIsNone(err)
+        self.assertIsNotNone(res)
+
+        # Verify call order: tools/list FIRST, then resources/read, then tools/call
+        self.assertEqual(call_log[0], ("tools/list", "00-testtrace-01"))
+        self.assertEqual(call_log[1], ("resources/read", "politica://uso", "00-testtrace-01"))
+        self.assertEqual(call_log[2][0], "tools/call")
+        self.assertEqual(call_log[2][1], "reservar_sala")
+
+        # Verify artifact has extracted politica version
+        task = res["task"]
+        self.assertEqual(task["status"]["state"], "TASK_STATE_COMPLETED")
+        artifact = task["artifacts"][0]
+        content = json.loads(artifact["parts"][0]["text"])
+        self.assertEqual(content["politica"], "2026-11-01")
 
 
 if __name__ == "__main__":

@@ -77,6 +77,15 @@ class RoomRepository:
     def get_politica_texto(self) -> str:
         return self._politica_texto
 
+    def get_politica_versao(self) -> str:
+        for line in self._politica_texto.splitlines():
+            line = line.strip()
+            if line.startswith("versao:"):
+                return line.split(":", 1)[1].strip()
+            elif line:
+                return line
+        return "2026-11-01"
+
     def get_reservas(self) -> list[Reserva]:
         return list(self._reservas)
 

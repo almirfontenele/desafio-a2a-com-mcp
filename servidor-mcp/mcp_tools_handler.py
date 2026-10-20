@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from mcp_config import SERVER_INFO, VERSAO_POLITICA, ERRO_SEM_ALTERNATIVA
+from mcp_config import SERVER_INFO, ERRO_SEM_ALTERNATIVA
 from mcp_models import Sala
 from mcp_repository import RoomRepository
 from mcp_rules import BookingPolicyValidator
@@ -221,7 +221,7 @@ class ToolsHandler:
                 "inicio": reserva.inicio,
                 "fim": reserva.fim,
                 "responsavel": reserva.responsavel,
-                "politica": VERSAO_POLITICA,
+                "politica": self._repository.get_politica_versao(),
                 "motivo": None,
             }
             return 200, {
@@ -363,7 +363,7 @@ class ToolsHandler:
                 "inicio": reserva.inicio,
                 "fim": reserva.fim,
                 "responsavel": reserva.responsavel,
-                "politica": VERSAO_POLITICA,
+                "politica": self._repository.get_politica_versao(),
                 "motivo": None,
             }
             return 200, {
