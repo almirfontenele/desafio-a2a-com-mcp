@@ -1,5 +1,5 @@
 """
-Handler for MCP tools execution and discovery.
+Handler for MCP tools execution and discovery using official MCP SDK types.
 """
 
 from __future__ import annotations
@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from mcp.types import Tool, TextContent
 from mcp_config import SERVER_INFO, ERRO_SEM_ALTERNATIVA
 from mcp_models import Sala
 from mcp_repository import RoomRepository
@@ -32,17 +33,17 @@ class ToolsHandler:
         self._validator = policy_validator
         self._token_service = token_service
 
-    def get_tools_list(self) -> dict[str, Any]:
-        tools = [
-            {
-                "name": "listar_salas",
-                "description": "Lista todas as salas com capacidade e recursos.",
-                "inputSchema": {
+    def get_tool_definitions(self) -> list[Tool]:
+        return [
+            Tool(
+                name="listar_salas",
+                description="Lista todas as salas com capacidade e recursos.",
+                inputSchema={
                     "type": "object",
                     "properties": {},
                     "title": "listar_salasArguments",
                 },
-                "outputSchema": {
+                outputSchema={
                     "type": "object",
                     "properties": {
                         "salas": {
@@ -61,11 +62,11 @@ class ToolsHandler:
                     },
                     "required": ["salas"],
                 },
-            },
-            {
-                "name": "consultar_disponibilidade",
-                "description": "Diz se uma sala esta livre no intervalo, e quais reservas conflitam.",
-                "inputSchema": {
+            ),
+            Tool(
+                name="consultar_disponibilidade",
+                description="Diz se uma sala esta livre no intervalo, e quais reservas conflitam.",
+                inputSchema={
                     "type": "object",
                     "properties": {
                         "sala": {"type": "string", "title": "Sala"},
@@ -75,7 +76,7 @@ class ToolsHandler:
                     "required": ["sala", "inicio", "fim"],
                     "title": "consultar_disponibilidadeArguments",
                 },
-                "outputSchema": {
+                outputSchema={
                     "type": "object",
                     "properties": {
                         "sala": {"type": "string"},
@@ -84,11 +85,11 @@ class ToolsHandler:
                     },
                     "required": ["sala", "livre", "conflitos"],
                 },
-            },
-            {
-                "name": "reservar_sala",
-                "description": "Reserva uma sala. Se o intervalo estiver ocupado, pergunta qual alternativa usar.",
-                "inputSchema": {
+            ),
+            Tool(
+                name="reservar_sala",
+                description="Reserva uma sala. Se o intervalo estiver ocupado, pergunta qual alternativa usar.",
+                inputSchema={
                     "type": "object",
                     "properties": {
                         "sala": {"type": "string", "title": "Sala"},
@@ -99,7 +100,7 @@ class ToolsHandler:
                     "required": ["sala", "inicio", "fim", "responsavel"],
                     "title": "reservar_salaArguments",
                 },
-                "outputSchema": {
+                outputSchema={
                     "type": "object",
                     "properties": {
                         "reserva": {"type": ["string", "null"]},
@@ -112,8 +113,11 @@ class ToolsHandler:
                         "motivo": {"type": ["string", "null"]},
                     },
                 },
-            },
+            ),
         ]
+
+    def get_tools_list(self) -> dict[str, Any]:
+        tools = [t.model_dump(exclude_none=True) for t in self.get_tool_definitions()]
         return {
             "result": {
                 "cacheScope": "private",

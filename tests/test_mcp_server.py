@@ -129,6 +129,28 @@ class TestMCPServerDomainAndRules(unittest.TestCase):
         """Verify that repository dynamically extracts policy version from first line of markdown."""
         self.assertEqual(self.repository.get_politica_versao(), "2026-11-01")
 
+    def test_mcp_sdk_types_and_server_app(self):
+        """Verify integration with official MCP SDK types (Tool, Resource) and Starlette ASGI app."""
+        from mcp.types import Tool, Resource
+        from mcp_tools_handler import ToolsHandler
+        from mcp_resources_handler import ResourcesHandler
+        from server import MCPServiceContainer, create_mcp_app
+
+        tools_handler = ToolsHandler(self.repository, self.validator, self.token_service)
+        tool_defs = tools_handler.get_tool_definitions()
+        self.assertEqual(len(tool_defs), 3)
+        self.assertTrue(all(isinstance(t, Tool) for t in tool_defs))
+
+        resources_handler = ResourcesHandler(self.repository)
+        res_defs = resources_handler.get_resource_definitions()
+        self.assertEqual(len(res_defs), 1)
+        self.assertTrue(all(isinstance(r, Resource) for r in res_defs))
+
+        container = MCPServiceContainer(secret="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+        self.assertIsNotNone(container.mcp_server)
+        app = create_mcp_app(container)
+        self.assertIsNotNone(app)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -19,15 +19,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copia os arquivos do repositório para a imagem
 COPY . /app
 
-# Instala dependências Python necessárias para o servidor MCP, agente e validador
-RUN pip install --no-cache-dir \
-    mcp \
-    uvicorn \
-    fastapi \
-    requests \
-    httpx \
-    aiohttp \
-    pydantic
+# Instala dependências declaradas com versões pinadas no pyproject.toml
+RUN pip install --no-cache-dir .
 
 # Exposição das portas 7300 (Agente A2A) e 7301 (Servidor MCP)
 EXPOSE 7300 7301
