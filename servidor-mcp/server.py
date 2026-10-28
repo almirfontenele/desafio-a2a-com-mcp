@@ -21,9 +21,12 @@ from mcp.types import (
     ServerCapabilities,
     ToolsCapability,
     ResourcesCapability,
+    PaginatedRequestParams,
+    ReadResourceRequestParams,
+    CallToolRequestParams,
 )
 
-from mcp_config import PROTOCOLO_MCP
+from mcp_config import PROTOCOLO_MCP, SERVER_INFO
 from mcp_repository import RoomRepository
 from mcp_rules import BookingPolicyValidator
 from mcp_resources_handler import ResourcesHandler
@@ -46,13 +49,40 @@ class MCPServiceContainer:
         self._register_mcp_handlers()
 
     def _register_mcp_handlers(self) -> None:
-        @self.mcp_server.list_tools()
-        async def handle_list_tools() -> list[Tool]:
-            return self.tools_handler.get_tool_definitions()
+        async def handle_list_tools(params: Any, meta: dict[str, Any] | None = None) -> tuple[int, dict[str, Any]]:
+            return 200, self.tools_handler.get_tools_list()
 
-        @self.mcp_server.list_resources()
-        async def handle_list_resources() -> list[Resource]:
-            return self.resources_handler.get_resource_definitions()
+        async def handle_read_resource(params: Any, meta: dict[str, Any] | None = None) -> tuple[int, dict[str, Any]]:
+            uri = params.get("uri", "") if isinstance(params, dict) else getattr(params, "uri", "")
+            return self.resources_handler.read_resource(uri)
+
+        async def handle_call_tool(params: Any, meta: dict[str, Any] | None = None) -> tuple[int, dict[str, Any]]:
+            return self.tools_handler.execute_tool(params, meta or {})
+
+        async def handle_list_resources(params: Any, meta: dict[str, Any] | None = None) -> tuple[int, dict[str, Any]]:
+            resources = [r.model_dump(exclude_none=True) for r in self.resources_handler.get_resource_definitions()]
+            return 200, {
+                "result": {
+                    "resources": resources,
+                    "_meta": SERVER_INFO["io.modelcontextprotocol/serverInfo"],
+                }
+            }
+
+        self.mcp_server.add_request_handler("tools/list", PaginatedRequestParams, handle_list_tools)
+        self.mcp_server.add_request_handler("resources/read", ReadResourceRequestParams, handle_read_resource)
+        self.mcp_server.add_request_handler("tools/call", CallToolRequestParams, handle_call_tool)
+        self.mcp_server.add_request_handler("resources/list", PaginatedRequestParams, handle_list_resources)
+
+    async def dispatch_request(
+        self, method: str, params: dict[str, Any], meta: dict[str, Any]
+    ) -> tuple[int, dict[str, Any]]:
+        """Dispatches an MCP JSON-RPC method call through the official Server instance."""
+        handler_entry = self.mcp_server.get_request_handler(method)
+        if handler_entry is None:
+            return 200, {
+                "error": {"code": -32601, "message": f"Method not found: {method}"}
+            }
+        return await handler_entry.handler(params, meta)
 
     def reset(self) -> None:
         self.repository.reload()
@@ -127,25 +157,9 @@ def create_mcp_app(container: MCPServiceContainer | None = None) -> Starlette:
                 status_code=400,
             )
 
-        # Roteamento de métodos JSON-RPC
-        if method == "tools/list":
-            result_data = service_container.tools_handler.get_tools_list()
-            return JSONResponse({"jsonrpc": "2.0", "id": req_id, **result_data}, status_code=200)
-        elif method == "resources/read":
-            status_code, result_data = service_container.resources_handler.read_resource(params.get("uri", ""))
-            return JSONResponse({"jsonrpc": "2.0", "id": req_id, **result_data}, status_code=status_code)
-        elif method == "tools/call":
-            status_code, result_data = service_container.tools_handler.execute_tool(params, meta)
-            return JSONResponse({"jsonrpc": "2.0", "id": req_id, **result_data}, status_code=status_code)
-        else:
-            return JSONResponse(
-                {
-                    "jsonrpc": "2.0",
-                    "id": req_id,
-                    "error": {"code": -32601, "message": f"Method not found: {method}"},
-                },
-                status_code=200,
-            )
+        # Despacho de métodos JSON-RPC via Server oficial do MCP
+        status_code, result_data = await service_container.dispatch_request(method, params, meta)
+        return JSONResponse({"jsonrpc": "2.0", "id": req_id, **result_data}, status_code=status_code)
 
     routes = [
         Route("/", get_root, methods=["GET"]),

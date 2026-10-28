@@ -117,7 +117,7 @@ class ToolsHandler:
         ]
 
     def get_tools_list(self) -> dict[str, Any]:
-        tools = [t.model_dump(exclude_none=True) for t in self.get_tool_definitions()]
+        tools = [t.model_dump(by_alias=True, exclude_none=True) for t in self.get_tool_definitions()]
         return {
             "result": {
                 "cacheScope": "private",

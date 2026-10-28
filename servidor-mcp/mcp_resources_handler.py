@@ -34,7 +34,7 @@ class ResourcesHandler:
             uri="politica://uso",
             mimeType="text/markdown",
             text=self._repository.get_politica_texto(),
-        ).model_dump(mode="json", exclude_none=True)
+        ).model_dump(mode="json", by_alias=True, exclude_none=True)
 
         return 200, {
             "result": {
